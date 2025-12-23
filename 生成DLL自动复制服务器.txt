@@ -1,0 +1,11 @@
+copy bin\Release\net6.0\DeathEvent.dll C:\Users\羽学\Desktop\TShock5\ServerPlugins
+del C:\Users\羽学\Desktop\TShock5\tshock\共同死亡事件.json
+taskkill /F /IM TShock.Server.exe
+
+
+    <ItemGroup>
+		<NuGetAuditSuppress Include="https://github.com/advisories/GHSA-6qmf-mmc7-6c2p" />
+		<NuGetAuditSuppress Include="https://github.com/advisories/GHSA-68w7-72jg-6qpp" />
+		<NuGetAuditSuppress Include="https://github.com/advisories/GHSA-447r-wph3-92pm" />
+      <PackageReference Include="TShock" Version="5.2.1" />
+    </ItemGroup>
