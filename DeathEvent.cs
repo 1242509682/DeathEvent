@@ -1,10 +1,11 @@
-﻿using Terraria;
-using TShockAPI;
-using System.Text;
-using TShockAPI.Hooks;
-using TerrariaApi.Server;
+﻿using System.Text;
 using Microsoft.Xna.Framework;
+using Terraria;
+using TerrariaApi.Server;
+using TShockAPI;
+using TShockAPI.Hooks;
 using static DeathEvent.Data;
+using static DeathEvent.Rewards;
 
 namespace DeathEvent;
 
@@ -14,7 +15,7 @@ public class DeathEvent : TerrariaPlugin
     #region 插件信息
     public override string Name => "共同死亡事件";
     public override string Author => "Kimi,羽学";
-    public override Version Version => new(1, 0, 3);
+    public override Version Version => new(1, 0, 4);
     public override string Description => "玩家死亡实现共同死亡事件,允许重生后实现补偿,支持队伍模式";
     #endregion
 
@@ -78,15 +79,16 @@ public class DeathEvent : TerrariaPlugin
             Config.AddDeath(plr.Name);
             if (Config.Team && plr.Team > -1)
             {
-                // 现在只在这里增加队伍死亡次数
-                Config.AddTeamDeath(plr.Team);
+                // 增加队伍死亡次数
+                Config.AddTeamDeath(GetTeamName(plr.Team));
             }
+            Config.Write();
 
             string msg;
             if (Config.Team)
             {
                 msg = $"————[c/508DC8:{plr.Name}]死亡————" +
-                      $"\n{GetTeamName(plr.Team)}死亡{Config.GetTeamDeath(plr.Team)}次，" +
+                      $"\n{GetTeamName(plr.Team)}死亡{Config.GetTeamDeath(GetTeamName(plr.Team))}次，" +
                       $"正在执行队伍死亡事件";
             }
             else
@@ -99,11 +101,6 @@ public class DeathEvent : TerrariaPlugin
             TSPlayer.All.SendMessage(msg, 240, 250, 150);
             GetResp(plr).Clear();
         }
-        else
-        {
-            // 后续死亡的玩家只增加个人死亡次数
-            Config.AddDeath(plr.Name);
-        }
 
         if (dead.Contains(plr.Name)) return;
 
@@ -111,16 +108,31 @@ public class DeathEvent : TerrariaPlugin
         plr.RespawnTimer = Config.RespawnTimer;
 
         int team = Config.Team ? plr.Team : -1;
+
+        HashSet<int> other = new HashSet<int>();
         for (int i = 0; i < TShock.Players.Length; i++)
         {
             var p = TShock.Players[i];
             if (p == null || !p.RealPlayer || !p.Active || p.Dead) continue;
             if (dead.Contains(p.Name)) continue;
             if (Config.WhiteList.Contains(p.Name)) continue;
-            if (Config.Team && p.Team != team) continue;
+
+            if (Config.Team && p.Team != team)
+            {
+                if (!other.Contains(p.Index))
+                    other.Add(p.Index);
+
+                continue;
+            }
 
             p.KillPlayer();
             TSPlayer.All.SendData(PacketTypes.DeadPlayer, "", p.Index);
+        }
+
+        // 激励其他队伍功能（只在第一个玩家死亡时执行）
+        if (Config.Team && Config.Incentive && other.Count > 0 && dead.Count == 1)
+        {
+            DoReward(plr, other);
         }
     }
     #endregion
@@ -134,7 +146,7 @@ public class DeathEvent : TerrariaPlugin
         // 显示死亡统计
         if (Config.Team && plr.Team > -1)
         {
-            plr.SendMessage($"{GetTeamName(plr.Team)}总死亡次数: [c/508DC8:{Config.GetTeamDeath(plr.Team)}]次", Color.LightGreen);
+            plr.SendMessage($"{GetTeamName(plr.Team)}总死亡次数: [c/508DC8:{Config.GetTeamDeath(GetTeamName(plr.Team))}]次", Color.LightGreen);
         }
         else
         {
@@ -169,7 +181,7 @@ public class DeathEvent : TerrariaPlugin
         string cont = mess.ToString();
         string exc = GetExc(plr);
 
-        if (!string.IsNullOrEmpty(exc)) 
+        if (!string.IsNullOrEmpty(exc))
             cont += exc;
 
         // 检查是否是第一个重生的玩家
@@ -209,37 +221,36 @@ public class DeathEvent : TerrariaPlugin
 
             string names = string.Join("、", resp);
             string prefix = Config.Team ? $"{GetTeamName(plr.Team)}" : "";
-
             string text;
-            if (Config.Team)
-            {
-                text = $"\n{prefix}死亡事件补尝(总死亡{Config.GetTeamDeath(plr.Team)}次)：{finalCont}\n队伍名单：{names}";
-            }
-            else
-            {
-                text = $"\n共同死亡事件补尝：{finalCont}\n补尝名单：{names}";
-            }
 
             if (Config.Team)
             {
                 int team = plr.Team;
+                text = $"\n{prefix}死亡事件补尝(总死亡{Config.GetTeamDeath(GetTeamName(plr.Team))}次)：{finalCont}\n队伍名单：{names}";
                 for (int i = 0; i < TShock.Players.Length; i++)
                 {
                     var p = TShock.Players[i];
                     if (p != null && p.Team == team)
                     {
-                        Tool.GradMess(p,text); // 逐行渐变
+                        Tool.GradMess(p, text); // 逐行渐变
                     }
                 }
             }
             else
             {
+                text = $"\n共同死亡事件补尝：{finalCont}\n补尝名单：{names}";
                 TSPlayer.All.SendMessage(Tool.TextGradient(text), Color.White); // 逐字渐变
             }
 
             SetCoolDown(plr);
             HandleExce(plr);
-            ClearData(plr);
+
+            // 清理激励相关的临时数据（只在队伍模式且激励功能开启时）
+            if (Config.Team && Config.Incentive)
+            {
+                int team = plr.Team;
+                RemoveReward(team);
+            }
         }
     }
     #endregion
@@ -376,7 +387,8 @@ public class DeathEvent : TerrariaPlugin
                 TShock.Config.Settings.MaxHP = maxHP;
                 TShock.Config.Settings.MaxMP = maxMP;
 
-                Task.Run(() => {
+                Task.Run(() =>
+                {
                     TShock.Config.Write(Path.Combine(TShock.SavePath, "config.json"));
                 });
 
@@ -417,7 +429,7 @@ public class DeathEvent : TerrariaPlugin
             }
 
             // 保存队伍信息
-            string teamName = Config.GetTeamName(newTeam);
+            string teamName = GetTeamName(newTeam);
             Config.BackTeam[plr.Name] = teamName;
             Config.Write();
 
@@ -431,6 +443,11 @@ public class DeathEvent : TerrariaPlugin
             oldData.Dead.Remove(plr.Name);
             oldData.Resp.Remove(plr.Name);
             ClearData(plr);
+
+            if (Config.Incentive && oldTeam > -1)
+            {
+                ClearReward(plr, oldTeam);
+            }
 
             string oldName = GetTeamName(oldTeam);
             string newName = GetTeamName(newTeam);
@@ -472,7 +489,7 @@ public class DeathEvent : TerrariaPlugin
         if (Config.BackTeam.ContainsKey(plr.Name))
         {
             string teamName = Config.BackTeam[plr.Name];
-            int teamId = Config.GetTeamByName(teamName);
+            int teamId = GetTeamId(teamName);
 
             if (teamId != plr.Team && teamId > 0)
             {
@@ -496,6 +513,12 @@ public class DeathEvent : TerrariaPlugin
             data.Dead.Remove(plr.Name);
             data.Resp.Remove(plr.Name);
             ClearData(plr);
+        }
+
+        // 检查并清理激励数据
+        if (Config.Team && Config.Incentive && teamId > -1)
+        {
+            ClearReward(plr, teamId);
         }
     }
     #endregion

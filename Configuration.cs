@@ -11,33 +11,35 @@ internal class Configuration
     public bool Enabled { get; set; } = true;
     [JsonProperty("队伍模式", Order = 1)]
     public bool Team { get; set; } = true;
-    [JsonProperty("切换队伍冷却", Order = 2)]
+    [JsonProperty("队伍激励", Order = 2)]
+    public bool Incentive { get; set; } = true;
+    [JsonProperty("切换队伍冷却", Order = 3)]
     public int SwitchCD = 30;
-    [JsonProperty("复活时间", Order = 3)]
+    [JsonProperty("复活时间", Order = 4)]
     public int RespawnTimer = 5;
-    [JsonProperty("补偿冷却", Order = 4)]
+    [JsonProperty("补偿冷却", Order = 5)]
     public int CoolDowned { get; set; } = 180;
-    [JsonProperty("增加生命", Order = 5)]
+    [JsonProperty("补偿增加生命", Order = 6)]
     public int AddLifeAmount { get; set; } = 30;
-    [JsonProperty("增加魔力", Order = 6)]
+    [JsonProperty("补偿增加魔力", Order = 7)]
     public int AddManaAmount { get; set; } = 10;
-    [JsonProperty("同步最高生命者", Order = 7)]
+    [JsonProperty("同步最高生命者", Order = 8)]
     public bool SyncLifeMax { get; set; } = true;
-    [JsonProperty("超出服务器上限", Order = 8)]
+    [JsonProperty("超出服务器上限", Order = 9)]
     public bool ExceMax { get; set; } = true;
-    [JsonProperty("给物品", Order = 9)]
+    [JsonProperty("补偿物品", Order = 10)]
     public bool GiveItem { get; set; } = true;
-    [JsonProperty("物品表", Order = 10)]
+    [JsonProperty("补偿物品表", Order = 11)]
     public Dictionary<int, int> ItemList { get; set; } = new Dictionary<int, int>();
-    [JsonProperty("执行命令", Order = 11)]
+    [JsonProperty("补偿执行命令", Order = 12)]
     public string[] DeathCommands { get; set; } = new string[0];
-    [JsonProperty("免疫名单", Order = 12)]
+    [JsonProperty("免疫名单", Order = 13)]
     public List<string> WhiteList { get; set; } = new List<string>();
-    [JsonProperty("个人死亡次数", Order = 13)]
+    [JsonProperty("个人死亡次数", Order = 14)]
     public Dictionary<string, int> DeathCount { get; set; } = new Dictionary<string, int>();
-    [JsonProperty("队伍死亡次数", Order = 14)]
+    [JsonProperty("队伍死亡次数", Order = 15)]
     public Dictionary<string, int> TeamDeathCount { get; set; } = new Dictionary<string, int>();
-    [JsonProperty("玩家队伍缓存", Order = 15)]
+    [JsonProperty("玩家队伍缓存", Order = 16)]
     public Dictionary<string, string> BackTeam { get; set; } = new Dictionary<string, string>();
 
     #region 预设参数方法
@@ -85,61 +87,21 @@ internal class Configuration
     #endregion
 
     #region 统计死亡次数方法
+    public int GetDeath(string name) => DeathCount.TryGetValue(name, out int count) ? count : 0;
     public void AddDeath(string name)
     {
         if (!DeathCount.ContainsKey(name))
             DeathCount[name] = 0;
         DeathCount[name]++;
-        Write();
     }
 
-    public void AddTeamDeath(int team)
+    public int GetTeamDeath(string name) => TeamDeathCount.TryGetValue(name, out int count) ? count : 0;
+    public void AddTeamDeath(string name)
     {
-        var name = GetTeamName(team);
         if (!TeamDeathCount.ContainsKey(name))
             TeamDeathCount[name] = 0;
 
         TeamDeathCount[name]++;
-        Write();
-    }
-
-    public int GetDeath(string name)
-    {
-        return DeathCount.TryGetValue(name, out int count) ? count : 0;
-    }
-
-    public int GetTeamDeath(int team)
-    {
-        var name = GetTeamName(team);
-        return TeamDeathCount.TryGetValue(name, out int count) ? count : 0;
-    }
-
-    public string GetTeamName(int teamId)
-    {
-        return teamId switch
-        {
-            0 => "白队",
-            1 => "红队",
-            2 => "绿队",
-            3 => "蓝队",
-            4 => "黄队",
-            5 => "粉队",
-            _ => "未知队伍"
-        };
-    }
-
-    public int GetTeamByName(string teamName)
-    {
-        return teamName switch
-        {
-            "白队" => 0,
-            "红队" => 1,
-            "绿队" => 2,
-            "蓝队" => 3,
-            "黄队" => 4,
-            "粉队" => 5,
-            _ => -1
-        };
     }
     #endregion
 }
