@@ -3,11 +3,123 @@ using Terraria;
 using Terraria.ID;
 using System.Text;
 using System.Text.RegularExpressions;
+using TShockAPI;
 
 namespace DeathEvent;
 
 internal class Tool
 {
+    #region 逐行渐变色方法
+    public static void GradMess(TSPlayer plr, string mess)
+    {
+        // 处理空值或空字符串
+        if (string.IsNullOrEmpty(mess))
+            return;
+
+        var lines = mess.Split('\n');
+        var GradMess = new StringBuilder();
+        var start = new Color(166, 213, 234);
+        var end = new Color(245, 247, 175);
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i];
+            if (!string.IsNullOrEmpty(line))
+            {
+                float ratio = (float)i / (lines.Length - 1);
+                var gradColor = Color.Lerp(start, end, ratio);
+                string colorHex = $"{gradColor.R:X2}{gradColor.G:X2}{gradColor.B:X2}";
+
+                // 检查是否已有颜色标签
+                if (line.Contains("[c/"))
+                {
+                    // 已有颜色标签，只处理图标
+                    GradMess.AppendLine(ReplaceIconsOnly(line));
+                }
+                else
+                {
+                    // 没有颜色标签，处理渐变和图标
+                    GradMess.AppendLine(ProcessLine(line, colorHex));
+                }
+            }
+            else
+            {
+                // 空行保留
+                GradMess.AppendLine();
+            }
+        }
+
+        plr.SendMessage(GradMess.ToString(), 240, 250, 150);
+    }
+
+    // 处理单行渐变和图标
+    private static string ProcessLine(string line, string colorHex)
+    {
+        var result = new StringBuilder();
+        int index = 0;
+        int length = line.Length;
+        int charCount = 0;
+
+        // 先计算需要渐变的总字符数（排除图标标签）
+        for (int i = 0; i < length; i++)
+        {
+            if (line[i] == '[' && i + 1 < length && line[i + 1] == 'i')
+            {
+                // 跳过整个图标标签
+                int end = line.IndexOf(']', i);
+                if (end != -1)
+                {
+                    i = end;
+                    continue;
+                }
+            }
+            charCount++;
+        }
+
+        // 重置索引，开始处理
+        for (int i = 0; i < length; i++)
+        {
+            char c = line[i];
+
+            // 检查是否是图标标签 [i:xxx] 或 [i/s数量:xxx]
+            if (c == '[' && i + 1 < length && line[i + 1] == 'i')
+            {
+                int end = line.IndexOf(']', i);
+                if (end != -1)
+                {
+                    string tag = line.Substring(i, end - i + 1);
+
+                    // 解析物品图标标签
+                    if (TryParseItemTag(tag, out string iconTag))
+                    {
+                        result.Append(iconTag);
+                    }
+                    else
+                    {
+                        result.Append(tag); // 无效标签保留原样
+                    }
+
+                    i = end; // 跳过整个标签
+                }
+                else
+                {
+                    // 不完整的标签，按普通字符处理
+                    result.Append($"[c/{colorHex}:{c}]");
+                    charCount++;
+                }
+            }
+            else
+            {
+                // 普通字符，使用渐变色
+                result.Append($"[c/{colorHex}:{c}]");
+                charCount++;
+            }
+        }
+
+        return result.ToString();
+    }
+    #endregion
+
     #region 渐变着色方法 + 物品图标解析
     public static string TextGradient(string text)
     {
