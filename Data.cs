@@ -15,17 +15,6 @@ internal static class Data
         public string Cont = "";
         public string Exc = "";
         public DateTime CoolDown = DateTime.UtcNow;
-        public bool DoReward = false; // 标记激励是否已执行
-        public List<ItemSlotInfo> SlotList = new List<ItemSlotInfo>(); // 物品槽位列表
-    }
-    // 物品槽位信息
-    public class ItemSlotInfo
-    {
-        public int PlayerIndex; // 玩家索引
-        public string PlayerName = ""; // 玩家名称
-        public int SlotIndex; // 槽位索引
-        public int ItemId; // 物品ID
-        public int ItemStack; // 物品数量
     }
     #endregion
 
@@ -54,8 +43,6 @@ internal static class Data
             data.Resp.Clear();
             data.Cont = "";
             data.Exc = "";
-            data.DoReward = false; // 重置激励执行标记
-            data.SlotList.Clear(); // 清空槽位列表
         }
         else if (!string.IsNullOrEmpty(pName))
         {
@@ -79,8 +66,7 @@ internal static class Data
     public static void SetSwitchCD(string name) => SwitchCD[name] = DateTime.UtcNow;
     public static bool CheckSwitchCD(string name)
     {
-        if (!SwitchCD.ContainsKey(name))
-            return false;
+        if (!SwitchCD.ContainsKey(name)) return false;
 
         TimeSpan timeSpan = DateTime.UtcNow - SwitchCD[name];
 
@@ -92,39 +78,6 @@ internal static class Data
         }
 
         return true; // 冷却中
-    }
-    #endregion
-
-    #region 清理激励数据
-    public static void ClearReward(TSPlayer plr, int teamId)
-    {
-        // 检查该队伍是否还有其他在线玩家
-        bool has = false;
-        for (int i = 0; i < TShock.Players.Length; i++)
-        {
-            var p = TShock.Players[i];
-            if (p != null && p.IsLoggedIn && p.Team == teamId && p.Index != plr.Index)
-            {
-                has = true;
-                break;
-            }
-        }
-
-        // 如果没有其他在线玩家，清理该队伍的激励数据
-        if (!has)
-        {
-            RemoveReward(teamId);
-        }
-    }
-
-    public static void RemoveReward(int teamId)
-    {
-        if (MyData.ContainsKey(teamId))
-        {
-            var data = MyData[teamId];
-            data.SlotList.Clear();
-            data.DoReward = false;
-        }
     }
     #endregion
 }

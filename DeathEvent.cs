@@ -88,12 +88,7 @@ public class DeathEvent : TerrariaPlugin
 
         // 只清理玩家自己的数据，不影响队伍其他成员
         ClearData(plr.Team, plr.Name);
-
-        // 检查并清理激励数据
-        if (Config.Team && Config.Incentive && plr.Team > -1)
-        {
-            ClearReward(plr, plr.Team);
-        }
+        SwitchCD.Remove(plr.Name);
     }
     #endregion
 
@@ -113,8 +108,6 @@ public class DeathEvent : TerrariaPlugin
         {
             // 清理上次的数据（包括激励数据）
             ClearData(team, true);
-            if (Config.Incentive && Config.Team)
-                RemoveReward(team);
 
             // 更新死亡统计
             Config.AddDeath(plr.Name);
@@ -140,7 +133,7 @@ public class DeathEvent : TerrariaPlugin
         }
 
         var other = new HashSet<int>(); // 记录其他玩家以便激励
-        var teamPly = new List<TSPlayer>(); // 同队伍玩家（用于激励）
+        var teamPly = new List<TSPlayer>(); // 死亡同队伍玩家
 
         // 遍历所有在线玩家
         for (int i = 0; i < TShock.Players.Length; i++)
@@ -268,10 +261,6 @@ public class DeathEvent : TerrariaPlugin
                     }
                 }
 
-                // 清理激励相关的临时数据（只在激励功能开启时）
-                if (Config.Incentive)
-                    RemoveReward(team);
-
                 ClearData(team, true); // 清理队伍数据
             }
             else
@@ -317,12 +306,6 @@ public class DeathEvent : TerrariaPlugin
 
             // 从旧队伍移除玩家数据
             ClearData(oldTeam, plr.Name);
-
-            // 清理旧队伍的激励数据
-            if (Config.Incentive && oldTeam > -1)
-            {
-                ClearReward(plr, oldTeam);
-            }
 
             // 提示玩家队伍变更信息
             string oldName = GetTeamName(oldTeam);
