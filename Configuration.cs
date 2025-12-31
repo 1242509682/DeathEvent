@@ -16,7 +16,7 @@ internal class Configuration
     [JsonProperty("切换队伍冷却", Order = 3)]
     public int SwitchCD = 30;
     [JsonProperty("复活时间", Order = 4)]
-    public int RespawnTimer = 5;
+    public int RespawnTimer = 3;
     [JsonProperty("补偿冷却", Order = 5)]
     public int CoolDowned { get; set; } = 180;
     [JsonProperty("补偿增加生命", Order = 6)]
@@ -90,17 +90,14 @@ internal class Configuration
     public int GetDeath(string name) => DeathCount.TryGetValue(name, out int count) ? count : 0;
     public void AddDeath(string name)
     {
-        if (!DeathCount.ContainsKey(name))
-            DeathCount[name] = 0;
+        DeathCount.TryAdd(name, 0);
         DeathCount[name]++;
     }
 
     public int GetTeamDeath(string name) => TeamDeathCount.TryGetValue(name, out int count) ? count : 0;
     public void AddTeamDeath(string name)
     {
-        if (!TeamDeathCount.ContainsKey(name))
-            TeamDeathCount[name] = 0;
-
+        TeamDeathCount.TryAdd(name, 0);
         TeamDeathCount[name]++;
     }
     #endregion
