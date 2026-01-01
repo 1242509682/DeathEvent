@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using TShockAPI;
+using static Org.BouncyCastle.Math.EC.ECCurve;
 
 namespace DeathEvent;
 
@@ -65,6 +66,7 @@ internal class Configuration
     #endregion
 
     #region 读取与创建配置文件方法
+    public void WriteCache() => DeathCache.Write();
     public void Write()
     {
         // 写入主配置

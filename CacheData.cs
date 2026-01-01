@@ -25,6 +25,7 @@ public class CacheData
     public Dictionary<string, int> TeamDeathCount { get; set; } = new();
 
     #region 获取数据方法
+    public int GetTeamDeath(string name) => TeamDeathCount.TryGetValue(name, out int count) ? count : 0; 
     public PlayerDatas GetData(string name)
     {
         if (!PlayerData.TryGetValue(name, out var data))
@@ -34,8 +35,6 @@ public class CacheData
         }
         return data;
     }
-
-    public int GetTeamDeath(string name) => TeamDeathCount.TryGetValue(name, out int count) ? count : 0; 
     #endregion
 
     #region 检查切换队伍冷却
@@ -52,7 +51,7 @@ public class CacheData
         if (timeSpan.TotalSeconds >= Config.SwitchCD)
         {
             data.SwitchTime = null;
-            WriteCache(); // 只写入缓存
+            Config.WriteCache(); // 只写入缓存
             return false;
         }
 
@@ -61,7 +60,6 @@ public class CacheData
     #endregion
 
     #region 读取与写入缓存
-    public void WriteCache() => Config.DeathCache.Write();
     public void Write()
     {
         string json = JsonConvert.SerializeObject(this, Formatting.Indented);

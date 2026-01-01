@@ -142,7 +142,7 @@ public class DeathEvent : TerrariaPlugin
             Config.DeathCache.TeamDeathCount[teamName] = Config.DeathCache.GetTeamDeath(teamName) + 1;
 
             // 只写入缓存数据，不写入完整配置
-            Config.DeathCache.WriteCache();
+            Config.WriteCache();
 
             // 使用三目运算符简化
             string msg = Config.Team
@@ -338,7 +338,7 @@ public class DeathEvent : TerrariaPlugin
         plr.SendMessage($"您已从{oldName}切换到{newName}", 240, 250, 150);
         pdata.SwitchTime = DateTime.Now; // 设置切换队伍冷却
         pdata.TeamCache = newName; // 缓存玩家新队伍信息
-        Config.DeathCache.WriteCache();  // 只写入缓存数据
+        Config.WriteCache();  // 只写入缓存数据
 
         // 获取新队伍数据,并提示队伍死亡次数
         var newData = GetTeamData(newTeam);
