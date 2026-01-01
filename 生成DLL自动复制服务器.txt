@@ -1,3 +1,3 @@
 copy bin\Release\net6.0\DeathEvent.dll C:\Users\羽学\Desktop\TShock5\ServerPlugins
-del C:\Users\羽学\Desktop\TShock5\tshock\共同死亡事件.json
+rd /s /q "C:\Users\羽学\Desktop\TShock5\tshock\共同死亡事件"
 taskkill /F /IM TShock.Server.exe
