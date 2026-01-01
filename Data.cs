@@ -33,9 +33,12 @@ internal static class Data
     public static void ClearData(int teamId, string pName) => ClearData(teamId, false, pName);
     public static void ClearData(int teamId, bool clearAll = false, string? pName = null)
     {
-        // 根据配置确定实际的队伍ID
-        if (!MyData.ContainsKey(teamId)) return;
-        var data = MyData[teamId];
+        int Team = Config.Team ? teamId : -1;
+
+        if (!MyData.ContainsKey(Team)) return;
+
+        var data = MyData[Team];
+
         if (clearAll)
         {
             // 清理整个队伍数据

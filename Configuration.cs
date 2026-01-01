@@ -14,9 +14,9 @@ internal class Configuration
     [JsonProperty("队伍激励", Order = 2)]
     public bool Incentive { get; set; } = true;
     [JsonProperty("切换队伍冷却", Order = 3)]
-    public int SwitchCD = 30;
+    public int SwitchCD { get; set; } = 30;
     [JsonProperty("复活时间", Order = 4)]
-    public int RespawnTimer = 3;
+    public int RespawnTimer { get; set; } = 3;
     [JsonProperty("补偿冷却", Order = 5)]
     public int CoolDowned { get; set; } = 180;
     [JsonProperty("补偿增加生命", Order = 6)]

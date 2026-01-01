@@ -36,7 +36,8 @@ internal static class Rewards
         // 如果没有有效的其他队伍玩家，直接返回
         if (validOth.Count == 0) return;
 
-        var rand = Main.rand;  // Terraria的随机数生成器
+        // Terraria的随机数生成器
+        var rand = Main.rand;
 
         // 遍历死亡同队伍所有玩家
         foreach (var p in teamPly)

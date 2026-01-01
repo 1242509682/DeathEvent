@@ -88,7 +88,6 @@ public class DeathEvent : TerrariaPlugin
 
         // 只清理玩家自己的数据，不影响队伍其他成员
         ClearData(plr.Team, plr.Name);
-        SwitchCD.Remove(plr.Name);
     }
     #endregion
 
@@ -106,7 +105,7 @@ public class DeathEvent : TerrariaPlugin
         var dead = GetDead(plr);
         if (dead.Count == 0)  // 检查是否是新的死亡事件开始
         {
-            // 清理上次的数据（包括激励数据）
+            // 清理上次的数据
             ClearData(team, true);
 
             // 更新死亡统计
@@ -148,15 +147,15 @@ public class DeathEvent : TerrariaPlugin
             {
                 if (p.Team == team)
                 {
-                    // 同队伍玩家
+                    // 记录同队伍玩家用于激励
+                    teamPly.Add(p);
+
+                    // 杀死所有同队伍没死亡的玩家
                     if (!dead.Contains(p.Name) && !p.Dead)
                     {
                         p.KillPlayer();
                         TSPlayer.All.SendData(PacketTypes.DeadPlayer, "", p.Index);
                     }
-
-                    // 记录同队伍玩家用于激励（包括死亡玩家）
-                    teamPly.Add(p);
                 }
                 else
                 {
