@@ -4,7 +4,7 @@ using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.Hooks;
-using static DeathEvent.Data;
+using static DeathEvent.Tool;
 
 namespace DeathEvent;
 
@@ -14,7 +14,7 @@ public class DeathEvent : TerrariaPlugin
     #region 插件信息
     public override string Name => "共同死亡事件";
     public override string Author => "Kimi,羽学";
-    public override Version Version => new(1, 0, 4);
+    public override Version Version => new(1, 0, 5);
     public override string Description => "玩家死亡实现共同死亡事件,允许重生后实现补偿,支持队伍模式";
     #endregion
 
@@ -35,6 +35,8 @@ public class DeathEvent : TerrariaPlugin
         ServerApi.Hooks.ServerLeave.Register(this, OnServerLeave);
         ServerApi.Hooks.NetGreetPlayer.Register(this, OnGreetPlayer);
         GetDataHandlers.PlayerUpdate.Register(this.OnPlayerUpdate);
+        ServerApi.Hooks.GameUpdate.Register(this, OnUpdate);
+        Commands.ChatCommands.Add(new TShockAPI.Command("det.use", CMDs.CMD, "det", "共同死亡"));
     }
 
     protected override void Dispose(bool disposing)
@@ -48,6 +50,8 @@ public class DeathEvent : TerrariaPlugin
             ServerApi.Hooks.ServerLeave.Deregister(this, OnServerLeave);
             ServerApi.Hooks.NetGreetPlayer.Deregister(this, OnGreetPlayer);
             GetDataHandlers.PlayerUpdate.UnRegister(this.OnPlayerUpdate);
+            ServerApi.Hooks.GameUpdate.Deregister(this, OnUpdate);
+            Commands.ChatCommands.RemoveAll(x => x.CommandDelegate == CMDs.CMD);
         }
         base.Dispose(disposing);
     }
@@ -55,6 +59,7 @@ public class DeathEvent : TerrariaPlugin
 
     #region 配置重载读取与写入方法
     internal static Configuration Config = new();
+    internal static CacheData Cache => Config.DeathCache;
     private static void ReloadConfig(ReloadEventArgs args = null!)
     {
         LoadConfig();
@@ -75,10 +80,10 @@ public class DeathEvent : TerrariaPlugin
             Config is null || !Config.Enabled || !Config.Team) return;
 
         // 如果有缓存的队伍信息
-        string? teamCache = Config.DeathCache.GetData(plr.Name).TeamCache;
+        string? teamCache = Cache.GetData(plr.Name).TeamCache;
         if (!string.IsNullOrEmpty(teamCache))
         {
-            int teamId = GetTeamId(teamCache); // 获取队伍ID
+            int teamId = Data.GetTeamId(teamCache); // 获取队伍ID
             if (teamId != plr.Team && teamId > 0)
             {
                 plr.SetTeam(teamId); // 设置玩家队伍
@@ -86,8 +91,9 @@ public class DeathEvent : TerrariaPlugin
             }
         }
     }
+    #endregion
 
-    // 玩家更新事件,用于提示恢复队伍信息（因在OnGreetPlayer发送消息会导致消息被motd公告覆盖）
+    #region 玩家更新事件,用于提示恢复队伍信息
     private void OnPlayerUpdate(object? sender, GetDataHandlers.PlayerUpdateEventArgs e)
     {
         var plr = e.Player;
@@ -98,10 +104,37 @@ public class DeathEvent : TerrariaPlugin
         if (plr.GetData<bool>("join"))
         {
             // 发送恢复队伍消息
-            plr.SendMessage($"已恢复您的队伍为[c/508DC8:{Config.DeathCache.GetData(plr.Name).TeamCache}]", 240, 250, 150);
+            plr.SendMessage($"已恢复您的队伍为[c/508DC8:{Cache.GetData(plr.Name).TeamCache}]", color);
             plr.RemoveData("join"); // 移除加入标记
             return;
         }
+    }
+    #endregion
+
+    #region 游戏更新事件 检查投票是否超时
+    private int frame = 0;
+    private int Interval = 60;
+    private void OnUpdate(EventArgs args)
+    {
+        frame++; // 帧计数增加
+
+        // 检测投票状态,有投票,当前是5秒模式
+        if (Vote.VoteData.Count > 0 && Interval == 300)
+        {
+            Interval = 60; // 切换每秒模式
+            frame = Interval; // 立即执行检查
+        }
+
+        // 达到间隔时间再执行
+        if (frame < Interval) return;
+
+        frame = 0; // 重置帧计数
+
+        // 检查投票时间
+        Vote.CheckVoteTime();
+
+        // 动态调整间隔 有投票每秒遍历1次，没投票5秒遍历1次
+        Interval = Vote.VoteData.Count > 0 ? 60 : 300;
     }
     #endregion
 
@@ -112,7 +145,14 @@ public class DeathEvent : TerrariaPlugin
         if (plr == null || !Config.Enabled || !Config.Team) return;
 
         // 只清理玩家自己的数据，不影响队伍其他成员
-        ClearTeamData(plr.Team, plr.Name);
+        Data.ClearTeamData(plr.Team, plr.Name);
+
+        // 清理玩家的投票数据
+        if (Config.TeamApply)
+        {
+            // 清理玩家作为申请人的投票
+            Vote.ClearVotes(plr.Name);
+        }
     }
     #endregion
 
@@ -125,31 +165,28 @@ public class DeathEvent : TerrariaPlugin
             !Config.Enabled || Config is null) return;
 
         int team = Config.Team ? plr.Team : -1; // 确定队伍ID
-        var teamName = GetTeamName(team); // 获取队伍名称
+        var teamName = Data.GetTeamName(team); // 获取队伍名称
 
-        var dead = GetTeamData(plr).Dead;
+        var dead = Data.GetTeamData(plr).Dead;
         if (dead.Count == 0)  // 检查是否是新的死亡事件开始
         {
             // 清理上次的队伍数据
-            ClearTeamData(team, true);
+            Data.ClearTeamData(team, true);
 
             // 更新死亡统计
-            var pData = Config.DeathCache.GetData(plr.Name);
+            var pData = Cache.GetData(plr.Name);
             pData.DeathCount++;
             int deathCount = pData.DeathCount;
-
             // 更新队伍死亡次数
-            Config.DeathCache.TeamDeathCount[teamName] = Config.DeathCache.GetTeamDeath(teamName) + 1;
-
-            // 只写入缓存数据，不写入完整配置
-            Config.WriteCache();
+            Cache.TeamDeathCount[teamName] = Cache.GetTeamDeath(teamName) + 1;
+            Cache.Write();   // 写入缓存数据
 
             // 使用三目运算符简化
             string msg = Config.Team
-                       ? $"{teamName}死亡{Config.DeathCache.GetTeamDeath(teamName)}次，正在执行队伍死亡事件"
+                       ? $"{teamName}死亡{Cache.GetTeamDeath(teamName)}次，正在执行队伍死亡事件"
                        : $"个人死亡{deathCount}次，正在执行全体死亡事件";
 
-            TSPlayer.All.SendMessage($"\n————[c/508DC8:{plr.Name}]死亡————\n{msg}", 240, 250, 150);
+            TSPlayer.All.SendMessage($"\n————[c/508DC8:{plr.Name}]死亡————\n{msg}", color);
         }
 
         // 如果玩家不在死亡列表中，添加进去
@@ -167,7 +204,8 @@ public class DeathEvent : TerrariaPlugin
         {
             var p = TShock.Players[i];
             if (p == null || !p.RealPlayer || !p.Active ||
-                Config.WhiteList.Contains(p.Name))
+                Config.WhiteList.Contains(p.Name) ||
+                plr.HasPermission(CMDs.Admin))
                 continue;
 
             // 队伍模式下
@@ -219,7 +257,7 @@ public class DeathEvent : TerrariaPlugin
 
         SyncLife(plr); // 同步最大生命值
 
-        var data = GetTeamData(plr); // 获取玩家数据
+        var data = Data.GetTeamData(plr); // 获取玩家数据
         var dead = data.Dead; // 获取死亡列表
         var resp = data.Resp; // 获取重生列表
 
@@ -227,11 +265,11 @@ public class DeathEvent : TerrariaPlugin
         if (!dead.Contains(plr.Name)) return;
 
         int team = plr.Team;
-        var teamName = GetTeamName(team); // 获取队伍名称
+        var teamName = Data.GetTeamName(team); // 获取队伍名称
 
         // 显示死亡统计
-        plr.SendMessage($"{teamName}[c/508DC8:{Config.DeathCache.GetTeamDeath(teamName)}]次," +
-                        $"{plr.Name}[c/F5636F:{Config.DeathCache.GetData(plr.Name).DeathCount}]次", Color.LightGreen);
+        plr.SendMessage($"{teamName}[c/508DC8:{Cache.GetTeamDeath(teamName)}]次," +
+                        $"{plr.Name}[c/F5636F:{Cache.GetData(plr.Name).DeathCount}]次", Color.LightGreen);
 
         TimeSpan CoolTime = DateTime.UtcNow - data.CoolDown;
         double CoolRemain = Config.CoolDowned - CoolTime.TotalSeconds;
@@ -275,7 +313,7 @@ public class DeathEvent : TerrariaPlugin
             string names = string.Join("、", resp);
             if (Config.Team)
             {
-                string text = $"\n{teamName}死亡事件补尝(总次:{Config.DeathCache.GetTeamDeath(teamName)})：" +
+                string text = $"\n{teamName}死亡事件补尝(总次:{Cache.GetTeamDeath(teamName)})：" +
                               $"{finalCont}" +
                               $"\n队伍名单：{names}";
 
@@ -289,13 +327,13 @@ public class DeathEvent : TerrariaPlugin
                     }
                 }
 
-                ClearTeamData(team, true); // 清理队伍数据
+                Data.ClearTeamData(team, true); // 清理队伍数据
             }
             else
             {
                 string text = Tool.TextGradient($"\n共同死亡事件补尝：{finalCont}\n补尝名单：{names}");
                 TSPlayer.All.SendMessage(text, Color.White); // 逐字渐变
-                ClearTeamData(-1, true); // 清理全体数据
+                Data.ClearTeamData(-1, true); // 清理全体数据
             }
 
             data.CoolDown = DateTime.UtcNow; // 设置补偿冷却
@@ -316,40 +354,133 @@ public class DeathEvent : TerrariaPlugin
         if (oldTeam == newTeam) return;
 
         // 获取玩家缓存数据
-        var pdata = Config.DeathCache.GetData(plr.Name);
+        var pdata = Cache.GetData(plr.Name);
 
         // 检查切换队伍冷却 不检查白名单玩家
-        if (Config.DeathCache.CheckSwitchCD(plr.Name, pdata))
+        if (Cache.CheckSwitchCD(plr, pdata))
         {
             TimeSpan timeSpan = DateTime.Now - pdata.SwitchTime!.Value;
             double remain = Config.SwitchCD - timeSpan.TotalSeconds;
-            plr.SendMessage($"队伍切换冷却中，请等待:[c/508DC8:{remain:f2}]秒", 240, 250, 150);
+            plr.SendMessage($"队伍切换冷却中，请等待:[c/508DC8:{remain:f2}]秒", color);
             e.Handled = true;
             plr.SetTeam(oldTeam); // 强制还原队伍
             return;
         }
 
+        // 队伍申请功能
+        bool isTeamApply = TeamApply(e, plr, oldTeam, newTeam);
+
+        // 如果队伍申请功能已经处理了，就直接返回，不执行后续的缓存更新
+        if (isTeamApply)
+        {
+            return;
+        }
+
         // 从旧队伍移除玩家数据
-        ClearTeamData(oldTeam, plr.Name);
+        Data.ClearTeamData(oldTeam, plr.Name);
 
         // 提示玩家队伍变更信息
-        string oldName = GetTeamName(oldTeam);
-        string newName = GetTeamName(newTeam);
-        plr.SendMessage($"您已从{oldName}切换到{newName}", 240, 250, 150);
+        string oldName = Data.GetTeamName(oldTeam);
+        string newName = Data.GetTeamName(newTeam);
+        plr.SendMessage($"您已从{oldName}切换到{newName}", color);
         pdata.SwitchTime = DateTime.Now; // 设置切换队伍冷却
         pdata.TeamCache = newName; // 缓存玩家新队伍信息
-        Config.WriteCache();  // 只写入缓存数据
+        Cache.Write();  // 只写入缓存数据
 
         // 获取新队伍数据,并提示队伍死亡次数
-        var newData = GetTeamData(newTeam);
+        var newData = Data.GetTeamData(newTeam);
         if (newData.Dead.Count > 0)
-            plr.SendMessage($"{newName}已有{newData.Dead.Count}名队员死亡", 240, 250, 150);
+            plr.SendMessage($"{newName}已有{newData.Dead.Count}名队员死亡", color);
 
         // 显示新队伍补偿冷却信息
         TimeSpan CoolTime = DateTime.UtcNow - newData.CoolDown;
         double CoolRemain = Config.CoolDowned - CoolTime.TotalSeconds;
         if (CoolRemain > 0)
-            plr.SendMessage($"{newName}补尝冷却剩余: [c/508DC8:{CoolRemain:f2}]秒", 240, 250, 150);
+            plr.SendMessage($"{newName}补尝冷却剩余: [c/508DC8:{CoolRemain:f2}]秒", color);
+    }
+    #endregion
+
+    #region 队伍申请功能
+    private static bool TeamApply(GetDataHandlers.PlayerTeamEventArgs e, TSPlayer plr, int oldTeam, int newTeam)
+    {
+        // 检查玩家是否拥有直接切换权限（白名单或det.admin权限）
+        bool hasPerm = Config.WhiteList.Contains(plr.Name) || plr.HasPermission(CMDs.Admin);
+        if (hasPerm) return false; // 直接允许切换队伍
+
+        if (Config.TeamApply && newTeam > 0) // newTeam > 0 表示不是无队伍
+        {
+            // 检查玩家是否已有未结束的申请
+            if (Vote.HasPendingVote(plr.Name))
+            {
+                plr.SendMessage("您已有未完成的队伍申请，请等待投票结束", Color.Yellow);
+                e.Handled = true;
+                plr.SetTeam(oldTeam);
+                return true;
+            }
+
+            // 检查目标队伍是否已有未结束的投票
+            if (Vote.HasTeamVote(newTeam))
+            {
+                plr.SendMessage("该队伍已有申请投票正在进行，请稍后再试", Color.Yellow);
+                e.Handled = true;
+                plr.SetTeam(oldTeam);
+                return true;
+            }
+
+            var teamName = Data.GetTeamName(newTeam);
+            var target = new List<TSPlayer>();
+
+            // 一次性收集目标队伍成员
+            for (int i = 0; i < TShock.Players.Length; i++)
+            {
+                var p = TShock.Players[i];
+                if (p != null && p.Active && p.Team == newTeam && p.Index != plr.Index)
+                {
+                    target.Add(p);
+                }
+            }
+
+            // 如果目标队伍没有其他成员，直接允许加入
+            if (target.Count == 0)
+            {
+                plr.SendMessage($"已加入{teamName}（队伍内无其他成员）", color);
+                return false; // 返回false，让后续逻辑处理正常的队伍切换
+            }
+
+            // 还原队伍
+            e.Handled = true;
+            plr.SetTeam(oldTeam);
+
+            // 创建投票
+            var vote = new Vote.TeamVote
+            {
+                AppName = plr.Name,
+                Team = newTeam,
+                Start = DateTime.Now,
+                Time = Config.VoteTime
+            };
+
+            if (Vote.AddVote(vote))
+            {
+                // 通知目标队伍成员
+                string applyMsg = $"[c/508DC8:{plr.Name}]申请加入{teamName},\n" +
+                                  $"请使用 /det [c/5A9CDE:y] 或 /det [c/F4636F:n] 投票({Config.VoteTime}秒)";
+
+                foreach (var p in target)
+                {
+                    p.SendMessage(applyMsg, color);
+                }
+
+                plr.SendMessage($"已向{teamName}发送申请，等待投票结果", color);
+            }
+            else
+            {
+                plr.SendMessage("申请创建失败，请稍后再试", Color.Yellow);
+            }
+            return true;
+        }
+
+        return false;
     }
     #endregion
 
@@ -463,13 +594,13 @@ public class DeathEvent : TerrariaPlugin
             // 更新玩家最大生命值
             plr.TPlayer.statLifeMax = maxLife;
             plr.SendData(PacketTypes.PlayerHp, null, plr.Index);
-            var teamName = GetTeamName(plr.Team);
+            var teamName = Data.GetTeamName(plr.Team);
 
             string msg = Config.Team
                        ? $"已将您最大生命值,同步至当前{teamName}内数值最高玩家:[c/508DC8:{maxPlr.Name}]"
                        : $"已将您最大生命值,同步至数值最高在线玩家:[c/508DC8:{maxPlr.Name}]";
 
-            plr.SendMessage(msg, 240, 250, 150);
+            plr.SendMessage(msg, color);
         }
     }
     #endregion
@@ -483,7 +614,7 @@ public class DeathEvent : TerrariaPlugin
         if (!Config.ExceMax) return;
 
         var tplr = plr.TPlayer;
-        var data = GetTeamData(plr);
+        var data = Data.GetTeamData(plr);
         StringBuilder? info = null;
 
         lock (lockObj)
@@ -537,5 +668,4 @@ public class DeathEvent : TerrariaPlugin
         }
     }
     #endregion
-
 }

@@ -1,6 +1,5 @@
 ﻿using Newtonsoft.Json;
 using TShockAPI;
-using static Org.BouncyCastle.Math.EC.ECCurve;
 
 namespace DeathEvent;
 
@@ -8,16 +7,21 @@ internal class Configuration
 {
     public static readonly string Paths = Path.Combine(TShock.SavePath, "共同死亡事件");
     public static readonly string FilePath = Path.Combine(Paths, "共同死亡配置.json");
-    public static readonly string CachePath = Path.Combine(Paths, "死亡数据缓存.json");
 
     [JsonProperty("插件开关", Order = 0)]
     public bool Enabled { get; set; } = true;
+
     [JsonProperty("队伍模式", Order = 1)]
     public bool Team { get; set; } = true;
     [JsonProperty("队伍激励", Order = 2)]
     public bool Incentive { get; set; } = true;
-    [JsonProperty("切换队伍冷却", Order = 3)]
+    [JsonProperty("队伍申请", Order = 2)]
+    public bool TeamApply { get; set; } = true;
+    [JsonProperty("投票时间", Order = 2)]
+    public int VoteTime { get; set; } = 30;
+    [JsonProperty("切换队伍冷却", Order = 4)]
     public int SwitchCD { get; set; } = 30;
+
     [JsonProperty("复活时间", Order = 4)]
     public int RespawnTimer { get; set; } = 3;
     [JsonProperty("补偿冷却", Order = 5)]
@@ -66,7 +70,6 @@ internal class Configuration
     #endregion
 
     #region 读取与创建配置文件方法
-    public void WriteCache() => DeathCache.Write();
     public void Write()
     {
         // 写入主配置
@@ -88,9 +91,7 @@ internal class Configuration
         {
             string jsonContent = File.ReadAllText(FilePath);
             var config = JsonConvert.DeserializeObject<Configuration>(jsonContent)!;
-
-            // 读取缓存数据
-            config.DeathCache.Read();
+            config.DeathCache.Read(); // 读取缓存数据
             return config;
         }
     }

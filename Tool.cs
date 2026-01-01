@@ -9,6 +9,9 @@ namespace DeathEvent;
 
 internal class Tool
 {
+    // 用于消息颜色（奶黄色）
+    public static Color color => new(240, 250, 150);
+
     #region 逐行渐变色方法
     public static void GradMess(TSPlayer plr, string mess)
     {
@@ -49,7 +52,7 @@ internal class Tool
             }
         }
 
-        plr.SendMessage(GradMess.ToString(), 240, 250, 150);
+        plr.SendMessage(GradMess.ToString(), color);
     }
 
     // 处理单行渐变和图标

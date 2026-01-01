@@ -1,6 +1,7 @@
 ﻿using TShockAPI;
 using Terraria;
 using static DeathEvent.DeathEvent;  // 引用主插件类，用于访问Config
+using static DeathEvent.Tool;       // 引用工具类，用于访问辅助方法
 
 namespace DeathEvent;
 
@@ -43,7 +44,8 @@ internal static class Rewards
         foreach (var p in teamPly)
         {
             // 跳过白名单玩家（白名单玩家不会被抽取物品）
-            if (Config.WhiteList.Contains(p.Name)) continue;
+            if (Config.WhiteList.Contains(p.Name) ||
+                p.HasPermission(CMDs.Admin)) continue;
 
             // 收集玩家所有物品槽位
             var plySlots = CollectSlots(p);
@@ -77,13 +79,13 @@ internal static class Rewards
     private static void SendRewMsg(TSPlayer from, TSPlayer to, int id, int stack)
     {
         // 获取物品图标和数量的格式化字符串
-        string itemIcon = Tool.ItemIconStack(id, stack);
+        string itemIcon = ItemIconStack(id, stack);
 
         // 给源玩家：提示物品被奖励给谁
-        from.SendMessage($"您的{itemIcon}已奖励给[c/508DC8:{to.Name}]", 240, 250, 150);
+        from.SendMessage($"您的{itemIcon}已奖励给[c/508DC8:{to.Name}]", color);
 
         // 给目标玩家：提示从谁那里获得奖励
-        to.SendMessage($"恭喜您从[c/508DC8:{from.Name}]获得奖励{itemIcon}", 240, 250, 150);
+        to.SendMessage($"恭喜您从[c/508DC8:{from.Name}]获得奖励{itemIcon}", color);
     }
     #endregion
 
