@@ -14,7 +14,7 @@ public class DeathEvent : TerrariaPlugin
     #region 插件信息
     public override string Name => "共同死亡事件";
     public override string Author => "Kimi,羽学";
-    public override Version Version => new(1, 0, 5);
+    public override Version Version => new(1, 0, 6);
     public override string Description => "玩家死亡实现共同死亡事件,允许重生后实现补偿,支持队伍模式";
     #endregion
 
@@ -118,23 +118,17 @@ public class DeathEvent : TerrariaPlugin
     {
         frame++; // 帧计数增加
 
-        // 检测投票状态,有投票,当前是5秒模式
-        if (Vote.VoteData.Count > 0 && Interval == 300)
-        {
-            Interval = 60; // 切换每秒模式
-            frame = Interval; // 立即执行检查
-        }
+        // 动态调整间隔：有投票时每秒检查，无投票时每分钟检查
+        bool hasVotes = Vote.VoteData.Count > 0;
+        Interval = hasVotes ? 60 : 3600;
 
         // 达到间隔时间再执行
         if (frame < Interval) return;
 
         frame = 0; // 重置帧计数
 
-        // 检查投票时间
-        Vote.CheckVoteTime();
-
-        // 动态调整间隔 有投票每秒遍历1次，没投票5秒遍历1次
-        Interval = Vote.VoteData.Count > 0 ? 60 : 300;
+        // 检查投票时间（内部会先检查是否有超时投票）
+        Vote.CheckTimeout();
     }
     #endregion
 
@@ -151,7 +145,7 @@ public class DeathEvent : TerrariaPlugin
         if (Config.TeamApply)
         {
             // 清理玩家作为申请人的投票
-            Vote.ClearVotes(plr.Name);
+            Vote.Clear(plr.Name);
         }
     }
     #endregion
@@ -367,36 +361,14 @@ public class DeathEvent : TerrariaPlugin
             return;
         }
 
-        // 队伍申请功能
-        bool isTeamApply = TeamApply(e, plr, oldTeam, newTeam);
-
         // 如果队伍申请功能已经处理了，就直接返回，不执行后续的缓存更新
-        if (isTeamApply)
+        if (TeamApply(e, plr, oldTeam, newTeam))
         {
             return;
         }
 
-        // 从旧队伍移除玩家数据
-        Data.ClearTeamData(oldTeam, plr.Name);
-
-        // 提示玩家队伍变更信息
-        string oldName = Data.GetTeamName(oldTeam);
-        string newName = Data.GetTeamName(newTeam);
-        plr.SendMessage($"您已从{oldName}切换到{newName}", color);
-        pdata.SwitchTime = DateTime.Now; // 设置切换队伍冷却
-        pdata.TeamCache = newName; // 缓存玩家新队伍信息
-        Cache.Write();  // 只写入缓存数据
-
-        // 获取新队伍数据,并提示队伍死亡次数
-        var newData = Data.GetTeamData(newTeam);
-        if (newData.Dead.Count > 0)
-            plr.SendMessage($"{newName}已有{newData.Dead.Count}名队员死亡", color);
-
-        // 显示新队伍补偿冷却信息
-        TimeSpan CoolTime = DateTime.UtcNow - newData.CoolDown;
-        double CoolRemain = Config.CoolDowned - CoolTime.TotalSeconds;
-        if (CoolRemain > 0)
-            plr.SendMessage($"{newName}补尝冷却剩余: [c/508DC8:{CoolRemain:f2}]秒", color);
+        // 切换队伍
+        SwitchTeam(plr, newTeam);
     }
     #endregion
 
@@ -410,7 +382,7 @@ public class DeathEvent : TerrariaPlugin
         if (Config.TeamApply && newTeam > 0) // newTeam > 0 表示不是无队伍
         {
             // 检查玩家是否已有未结束的申请
-            if (Vote.HasPendingVote(plr.Name))
+            if (Vote.HasPending(plr.Name))
             {
                 plr.SendMessage("您已有未完成的队伍申请，请等待投票结束", Color.Yellow);
                 e.Handled = true;
@@ -419,7 +391,7 @@ public class DeathEvent : TerrariaPlugin
             }
 
             // 检查目标队伍是否已有未结束的投票
-            if (Vote.HasTeamVote(newTeam))
+            if (Vote.HasTeam(newTeam))
             {
                 plr.SendMessage("该队伍已有申请投票正在进行，请稍后再试", Color.Yellow);
                 e.Handled = true;
@@ -460,7 +432,7 @@ public class DeathEvent : TerrariaPlugin
                 Time = Config.VoteTime
             };
 
-            if (Vote.AddVote(vote))
+            if (Vote.Add(vote))
             {
                 // 通知目标队伍成员
                 string applyMsg = $"[c/508DC8:{plr.Name}]申请加入{teamName},\n" +
@@ -481,6 +453,48 @@ public class DeathEvent : TerrariaPlugin
         }
 
         return false;
+    }
+    #endregion
+
+    #region 队伍切换方法
+    public static void SwitchTeam(TSPlayer plr, int newTeam, bool fromEvent = true)
+    {
+        int oldTeam = plr.Team;
+
+        // 从旧队伍移除玩家数据
+        Data.ClearTeamData(oldTeam, plr.Name);
+
+        // 如果不是来自事件调用，直接设置队伍
+        if (!fromEvent)
+        plr.SetTeam(newTeam);
+
+        // 获取队伍名称
+        var oldName = Data.GetTeamName(oldTeam);
+        var newName = Data.GetTeamName(newTeam);
+
+        // 发送消息
+        string mess = fromEvent
+            ? $"[c/508DC8:{plr.Name}] 已从{oldName}加入到{newName}"
+            : $"[c/508DC8:{plr.Name}] 已加入 {newName}";
+
+        TSPlayer.All.SendMessage(mess, color);
+
+        // 更新缓存
+        var pdata = Cache.GetData(plr.Name);
+        pdata.SwitchTime = DateTime.Now;
+        pdata.TeamCache = newName;
+        Cache.Write();
+
+        // 获取新队伍数据并提示
+        var newData = Data.GetTeamData(newTeam);
+        if (newData.Dead.Count > 0)
+            plr.SendMessage($"{newName}已有{newData.Dead.Count}名队员死亡", color);
+
+        // 显示冷却信息
+        TimeSpan coolTime = DateTime.UtcNow - newData.CoolDown;
+        double coolRemain = Config.CoolDowned - coolTime.TotalSeconds;
+        if (coolRemain > 0)
+            plr.SendMessage($"{newName}补尝冷却剩余: [c/508DC8:{coolRemain:f2}]秒", color);
     }
     #endregion
 

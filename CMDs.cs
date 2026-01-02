@@ -39,7 +39,7 @@ internal class CMDs
             case "是":
             case "允许":
             case "同意":
-                Vote.VoteAction(plr,true);
+                Vote.Action(plr,true);
                 break;
 
             case "n":
@@ -47,7 +47,7 @@ internal class CMDs
             case "不":
             case "拒绝":
             case "不同意":
-                Vote.VoteAction(plr, false);
+                Vote.Action(plr, false);
                 break;
 
             case "vote":
@@ -126,7 +126,7 @@ internal class CMDs
             return;
         }
 
-        Vote.ShowVoteStatus(plr, vote);
+        Vote.ShowStatus(plr, vote);
     } 
     #endregion
 
@@ -711,6 +711,7 @@ internal class CMDs
         // 重置玩家和队伍数据
         if (name == "all")
         {
+            Vote.ClearAll();
             Data.TeamData.Clear();
             Cache.PlayerData.Clear();
             Cache.TeamDeathCount.Clear();
