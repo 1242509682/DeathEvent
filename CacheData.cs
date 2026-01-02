@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using System.Collections.Concurrent;
+using Newtonsoft.Json;
 using TShockAPI;
 using static DeathEvent.Configuration;
 using static DeathEvent.DeathEvent;
@@ -8,42 +9,59 @@ namespace DeathEvent;
 // 缓存数据类
 public class CacheData
 {
+
     public static readonly string CachePath = Path.Combine(Paths, "死亡数据缓存.json");
+    [JsonProperty("队伍数据", Order = 0)]
+    public ConcurrentDictionary<string, TeamCache> TeamData { get; set; } = new();
+    [JsonProperty("玩家数据", Order = 1)]
+    public Dictionary<string, PlayerCache> PlayerData { get; set; } = new();
 
     #region 玩家缓存数据
-    public class PlayerDatas
+    public class PlayerCache
     {
+        [JsonProperty("锁定队伍", Order = -1)]
+        public bool Lock { get; set; } = false;
         [JsonProperty("死亡次数", Order = 0)]
         public int DeathCount { get; set; } = 0;
         [JsonProperty("队伍缓存", Order = 1)]
-        public string? TeamCache { get; set; } = null;
+        public string? TeamName { get; set; } = null;
         [JsonProperty("切换队伍时间", Order = 2)]
         public DateTime? SwitchTime { get; set; } = null;
+        [JsonProperty("重生补偿时间", Order = 3)]
+        public DateTime CoolDown { get; set; } = DateTime.Now;
     }
     #endregion
 
-    [JsonProperty("玩家数据")]
-    public Dictionary<string, PlayerDatas> PlayerData { get; set; } = new();
-    [JsonProperty("队伍死亡次数")]
-    public Dictionary<string, int> TeamDeathCount { get; set; } = new();
+    #region 队伍缓存数据
+    public class TeamCache
+    {
+        [JsonProperty("死亡次数", Order = -1)]
+        public int DeathCount { get; set; } = 0;
+        [JsonProperty("已死亡玩家名单", Order = 0)]
+        public HashSet<string> Dead { get; set; } = new(); // 已死亡玩家名单
+        [JsonProperty("已复活玩家名单", Order = 1)]
+        public HashSet<string> Resp { get; set; } = new(); // 已复活玩家名单
+    }
+    #endregion
 
     #region 获取数据方法
-    public int GetTeamDeath(string name) => TeamDeathCount.TryGetValue(name, out int count) ? count : 0; 
-    public PlayerDatas GetData(string name)
+    public TeamCache GetTeamData(int teamId) => TeamData.GetOrAdd(GetTeamName(teamId), _ => new TeamCache());
+    public TeamCache GetTeamData(TSPlayer plr) => GetTeamData(Config.Team ? plr.Team : -1);
+    public PlayerCache GetPlayerData(string name)
     {
         if (!PlayerData.TryGetValue(name, out var data))
         {
-            data = new PlayerDatas();
+            data = new PlayerCache();
             PlayerData[name] = data;
         }
+
         return data;
     }
     #endregion
 
     #region 检查切换队伍冷却
-    public bool CheckSwitchCD(TSPlayer plr, PlayerDatas data)
+    public bool CheckSwitchCD(TSPlayer plr, PlayerCache data)
     {
-        // 如果在白名单中，不检查冷却
         if (Config.WhiteList.Contains(plr.Name) ||
             plr.HasPermission(CMDs.Admin)) return false;
 
@@ -51,10 +69,48 @@ public class CacheData
 
         TimeSpan timeSpan = DateTime.Now - data.SwitchTime.Value;
 
-        // 如果冷却已过期返回false
         if (timeSpan.TotalSeconds >= Config.SwitchCD) return false;
 
-        return true; // 默认返回true，表示仍在冷却中
+        return true;
+    }
+    #endregion
+
+    #region 队伍名称映射
+    public static string GetTeamName(int teamId) => TeamNameMap.TryGetValue(teamId, out var name) ? name : "全体";
+    public static string GetTeamCName(int teamId) => TeamColorMap.TryGetValue(teamId, out var name) ? name : "全体";
+    private static readonly Dictionary<int, string> TeamNameMap = new()
+    {
+        { -1, "全体" },{ 0, "白队" },{ 1, "红队" },{ 2, "绿队" },{ 3, "蓝队" },{ 4, "黄队" },{ 5, "粉队" }
+    };
+
+    private static readonly Dictionary<int, string> TeamColorMap = new()
+    {
+        { 0, "[c/5ADECE:白队]" },{ 1, "[c/F56470:红队]" },
+        { 2, "[c/74E25C:绿队]" },{ 3, "[c/5A9DDE:蓝队]" },
+        { 4, "[c/FCF466:黄队]" },{ 5, "[c/E15BC2:粉队]" }
+    };
+    #endregion
+
+    #region 队伍数据管理
+    public static int GetTeamId(string teamName) => TeamNameMap.FirstOrDefault(x => x.Value == teamName).Key;
+    public void ClearTeamData(int teamId, bool clearAll, string? pName = null)
+    {
+        int Team = Config.Team ? teamId : -1;
+        var name = GetTeamName(teamId);
+        if (!TeamData.ContainsKey(name)) return;
+
+        var data = TeamData[name];
+
+        if (clearAll)
+        {
+            data.Dead.Clear();
+            data.Resp.Clear();
+        }
+        else if (!string.IsNullOrEmpty(pName))
+        {
+            data.Dead.Remove(pName);
+            data.Resp.Remove(pName);
+        }
     }
     #endregion
 
@@ -76,7 +132,7 @@ public class CacheData
             string jsonContent = File.ReadAllText(CachePath);
             var cache = JsonConvert.DeserializeObject<CacheData>(jsonContent)!;
             PlayerData = cache.PlayerData ?? new();
-            TeamDeathCount = cache.TeamDeathCount ?? new();
+            TeamData = cache.TeamData ?? new();
         }
     }
     #endregion

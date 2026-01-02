@@ -8,9 +8,10 @@ internal class Configuration
     public static readonly string Paths = Path.Combine(TShock.SavePath, "共同死亡事件");
     public static readonly string FilePath = Path.Combine(Paths, "共同死亡配置.json");
 
-    [JsonProperty("插件开关", Order = 0)]
+    [JsonProperty("插件开关", Order = -1)]
     public bool Enabled { get; set; } = true;
-
+    [JsonProperty("集体死亡", Order = 0)]
+    public bool AllDead { get; set; } = true;
     [JsonProperty("队伍模式", Order = 1)]
     public bool Team { get; set; } = true;
     [JsonProperty("队伍激励", Order = 2)]

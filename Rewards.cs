@@ -81,11 +81,18 @@ internal static class Rewards
         // 获取物品图标和数量的格式化字符串
         string itemIcon = ItemIconStack(id, stack);
 
-        // 给源玩家：提示物品被奖励给谁
-        from.SendMessage($"您的{itemIcon}已奖励给[c/508DC8:{to.Name}]", color);
+        // 获取双方队伍名称
+        var fromTeam = CacheData.GetTeamCName(from.Team);
+        var toTeam = CacheData.GetTeamCName(to.Team);
 
+        // 给源玩家：提示物品被奖励给谁
+        from.SendMessage($"您的{itemIcon}已奖励给{toTeam}的[c/42D394:{to.Name}]", color);
         // 给目标玩家：提示从谁那里获得奖励
-        to.SendMessage($"恭喜您从[c/508DC8:{from.Name}]获得奖励{itemIcon}", color);
+        to.SendMessage($"恭喜您从{fromTeam}的[c/42D394:{from.Name}]获得奖励{itemIcon}", color);
+
+        // 只发送给除发送方和接收方以外的其他玩家
+        var other = TShock.Players.FirstOrDefault(p => p != null && p != from && p != to);
+        other?.SendMessage($"{toTeam}的[c/508DC8:{to.Name}]从{fromTeam}的[c/508DC8:{from.Name}]获得了:{itemIcon}", color);
     }
     #endregion
 

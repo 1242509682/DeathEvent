@@ -152,7 +152,24 @@ internal static class Vote
         // 仍有未投票成员
         else if (voted < stats.Total)
         {
-            SendMsg(vote); // 发送当前投票状态
+            var teamName = CacheData.GetTeamCName(vote.Team);
+            string msg = $"\n{teamName}投票: [c/508DC8:{vote.AppName}]申请加入\n" +
+                         $"同意:[c/32CD32:{stats.Agree}/{stats.Total}], 拒绝:[c/FF4500:{stats.Against}/{stats.Total}]\n" +
+                         $"同意率:[c/FFD700:{stats.AgreeRate:F1}%], 剩余:[c/00CED1:{vote.Remain}秒]\n" +
+                         "使用 /det [c/5A9CDE:y]同意, [c/F4636F:n]拒绝, [c/5ADED3:v]查看详情\n";
+
+            int remaining = stats.Total - voted;
+            if (remaining > 0)
+                msg += $"还需投票: [c/FCF567:{remaining}]人";
+
+            // 发送给目标队伍成员
+            foreach (var p in stats.Players)
+            {
+                if (p != null && p.Active)
+                {
+                    p.SendMessage(msg, Tool.color);
+                }
+            }
         }
     }
     #endregion
@@ -163,7 +180,24 @@ internal static class Vote
         var stats = vote.GetStats();
 
         // 发送结果消息
-        SendResult(vote, stats);
+        var teamName = CacheData.GetTeamCName(vote.Team);
+        string msg = $"\n投票结束！{teamName}申请结果:\n" +
+                     $"同意:[c/32CD32:{stats.Agree}/{stats.Total}] ({stats.AgreeRate:F1}%)\n";
+
+        msg += stats.AgreeRate > 50 ? "结果: [c/32CD32:通过]" : "结果: [c/FF4500:不通过]";
+
+        // 发送给所有相关玩家
+        for (int i = 0; i < TShock.Players.Length; i++)
+        {
+            var p = TShock.Players[i];
+            if (p != null && p.Active)
+            {
+                if (p.Name == vote.AppName || p.Team == vote.Team)
+                {
+                    p.SendMessage(msg, Tool.color);
+                }
+            }
+        }
 
         // 投票通过
         if (stats.AgreeRate > 50)
@@ -178,7 +212,7 @@ internal static class Vote
         else
         {
             var plr = TShock.Players.FirstOrDefault(p => p?.Name == vote.AppName);
-            plr?.SendMessage($"加入 {Data.GetTeamName(vote.Team)} 的申请被拒绝", Color.Red);
+            plr?.SendMessage($"加入 {CacheData.GetTeamCName(vote.Team)} 的申请被拒绝", Color.Red);
         }
 
         // 清理投票数据
@@ -186,34 +220,11 @@ internal static class Vote
     }
     #endregion
 
-    #region 发送最终结果
-    private static void SendResult(TeamVote vote, VoteStats stats)
-    {
-        var teamName = Data.GetTeamName(vote.Team);
-        string msg = $"\n投票结束！{teamName}申请结果:\n" +
-                     $"同意:[c/32CD32:{stats.Agree}/{stats.Total}] " +
-                     $"({stats.AgreeRate:F1}%)\n";
-
-        msg += stats.AgreeRate > 50 ? "结果: [c/32CD32:通过]" : "结果: [c/FF4500:不通过]";
-
-        // 发送给所有相关玩家
-        for (int i = 0; i < TShock.Players.Length; i++)
-        {
-            var p = TShock.Players[i];
-            if (p != null && p.Active)
-            {
-                if((p.Name == vote.AppName || p.Team == vote.Team))
-                p.SendMessage(msg, Tool.color);
-            }
-        }
-    }
-    #endregion
-
     #region 显示投票状态（用于/det v指令）
     public static void ShowStatus(TSPlayer plr, TeamVote vote)
     {
         var stats = vote.GetStats();
-        var teamName = Data.GetTeamName(vote.Team);
+        var teamName = CacheData.GetTeamCName(vote.Team);
 
         // 检查投票状态
         string info = plr.Name == vote.AppName ? "（您是申请人）"
@@ -247,32 +258,6 @@ internal static class Vote
             msg += $"未投票: [c/888888:{string.Join("、", notVoted)}]";
 
         plr.SendMessage(msg, Tool.color);
-    }
-    #endregion
-
-    #region 发送投票信息(用于投票后,投票还未结束前发送)
-    private static void SendMsg(TeamVote vote)
-    {
-        var stats = vote.GetStats();
-        var teamName = Data.GetTeamName(vote.Team);
-        string msg = $"\n{teamName}投票: [c/508DC8:{vote.AppName}]申请加入\n" +
-                     $"同意:[c/32CD32:{stats.Agree}/{stats.Total}], 拒绝:[c/FF4500:{stats.Against}/{stats.Total}]\n" +
-                     $"同意率:[c/FFD700:{stats.AgreeRate:F1}%], 剩余:[c/00CED1:{vote.Remain}秒]\n" +
-                     "使用 /det [c/5A9CDE:y]同意, [c/F4636F:n]拒绝, [c/5ADED3:v]查看详情\n";
-
-        int voted = stats.Agree + stats.Against;
-        int remaining = stats.Total - voted;
-        if (remaining > 0)
-            msg += $"还需投票: [c/FCF567:{remaining}]人";
-
-        // 发送给目标队伍成员
-        foreach (var p in stats.Players)
-        {
-            if (p != null && p.Active)
-            {
-                p.SendMessage(msg, Tool.color);
-            }
-        }
     }
     #endregion
 
@@ -330,7 +315,7 @@ internal static class Vote
     {
         try
         {
-            var teamName = Data.GetTeamName(vote.Team);
+            var teamName = CacheData.GetTeamCName(vote.Team);
             string msg = $"{teamName}投票已取消: {reason}";
 
             // 通知申请者（如果在线）
